@@ -1,3 +1,3 @@
-module github.com/silverspell/objectpool
+module github.com/silverspell/gobjectpool
 
 go 1.18
