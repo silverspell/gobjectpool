@@ -39,14 +39,20 @@ func (p *Pool) Init(options *PoolOptions) {
 func (p *Pool) Return(item any) {
 	if p.HasExceededMax() {
 		fmt.Println("Found a rogue one, cleaning")
-		p.OnDestroyFunction(item)
-		atomic.AddUint32(&p.CurrentItemCount, ^uint32(0))
+		p.destroy(item)
 		return
 	}
 	p.Locker.Lock()
 	p.Items = append(p.Items, item)
 	p.Locker.Unlock()
 	atomic.AddUint32(&p.CurrentItemCount, 1)
+}
+
+func (p *Pool) destroy(item any) {
+	p.OnDestroyFunction(item)
+	p.Locker.Lock()
+	atomic.AddUint32(&p.CurrentItemCount, uint32(len(p.Items)))
+	p.Locker.Unlock()
 }
 
 func (p *Pool) Borrow() (any, error) {
