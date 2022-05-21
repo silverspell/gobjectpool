@@ -51,7 +51,7 @@ func (p *Pool) Return(item any) {
 func (p *Pool) destroy(item any) {
 	p.OnDestroyFunction(item)
 	p.Locker.Lock()
-	atomic.AddUint32(&p.CurrentItemCount, uint32(len(p.Items)))
+	atomic.AddUint32(&p.CurrentItemCount, ^uint32(0))
 	p.Locker.Unlock()
 }
 
