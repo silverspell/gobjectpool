@@ -3,7 +3,6 @@ package gobjectpool
 import (
 	"fmt"
 	"sync"
-	"sync/atomic"
 )
 
 type CreateFunction func() any
@@ -20,7 +19,6 @@ type PoolOptions struct {
 type Pool struct {
 	noCopy            noCopy
 	MaxItems          uint32
-	CurrentItemCount  uint32
 	Locker            sync.Mutex
 	Items             []any
 	OnCreateFunction  CreateFunction
@@ -33,26 +31,21 @@ func (p *Pool) Init(options *PoolOptions) {
 	for i := 0; i < int(p.MaxItems); i++ {
 		p.Items[i] = p.OnCreateFunction()
 	}
-	atomic.StoreUint32(&p.CurrentItemCount, p.MaxItems)
 }
 
 func (p *Pool) Return(item any) {
+	p.Locker.Lock()
+	defer p.Locker.Unlock()
 	if p.HasExceededMax() {
 		fmt.Println("Found a rogue one, cleaning")
 		p.destroy(item)
 		return
 	}
-	p.Locker.Lock()
 	p.Items = append(p.Items, item)
-	p.Locker.Unlock()
-	atomic.AddUint32(&p.CurrentItemCount, 1)
 }
 
 func (p *Pool) destroy(item any) {
 	p.OnDestroyFunction(item)
-	p.Locker.Lock()
-	atomic.AddUint32(&p.CurrentItemCount, ^uint32(0))
-	p.Locker.Unlock()
 }
 
 func (p *Pool) Borrow() (any, error) {
@@ -61,18 +54,16 @@ func (p *Pool) Borrow() (any, error) {
 	defer p.Locker.Unlock()
 	if p.IsEmpty() { // in case pool is exhausted, we will try to add new item with OnCreate, on return we will check and destroy the mess
 		p.Items = append(p.Items, p.OnCreateFunction())
-		atomic.StoreUint32(&p.CurrentItemCount, 1)
 	}
 	item := p.Items[0]
 	p.Items = p.Items[1:]
-	atomic.AddUint32(&p.CurrentItemCount, ^uint32(0))
 	return item, nil
 }
 
 func (p *Pool) IsEmpty() bool {
-	return p.CurrentItemCount == 0
+	return len(p.Items) == 0 //we can not lock here, caller has already a lock
 }
 
 func (p *Pool) HasExceededMax() bool {
-	return p.CurrentItemCount > p.MaxItems
+	return uint32(len(p.Items)) > p.MaxItems // We also can not lock. Caller has already locked
 }
